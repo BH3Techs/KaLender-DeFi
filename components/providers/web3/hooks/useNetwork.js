@@ -23,11 +23,15 @@ export const handler = (web3) => () => {
         throw new Error("Cannot retrieve network. Please reload your browser")
 
       }
-      return NETWORKS[chainId];
+      return {
+        chainId: chainId,
+        name: NETWORKS[chainId]
+      };
     }
   );
 
-  const targetNetwork = NETWORKS["11155111"];
+  const targetChainId = 11155111;
+  const targetNetwork = NETWORKS[targetChainId];
 
 
   return {
@@ -35,7 +39,7 @@ export const handler = (web3) => () => {
     error,
     ...rest,
     target: targetNetwork,
-    isSupported: data === targetNetwork,
+    isSupported: data?.chainId === targetChainId,
   };
 };
 

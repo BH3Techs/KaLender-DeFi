@@ -6,6 +6,7 @@ require('./node_modules/dotenv').config();
 
 const MNEMONIC = process.env.MNEMONIC;
 const INFURA_API_KEY = process.env.INFURA_API_KEY;
+const ALCHEMY_API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_ID;
 
 module.exports = {
   networks: {
@@ -23,33 +24,42 @@ module.exports = {
       gas: 4465030,
       gasPrice: 10000000000,
     },
-    sepolia: {
-      provider: ()=>{
-        return new HDWalletProvider(
-          MNEMONIC,
-          `https://sepolia.infura.io/v3/${INFURA_API_KEY}`
-        )
-      },
-      gas_price: 4465030,
-      network_id: 11155111
-    }
+      sepolia: {
+          provider: ()=>{
+              return new HDWalletProvider({
+                  mnemonic: MNEMONIC,
+                  providerOrUrl: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+                  numberOfAddresses: 1,
+                  shareNonce: true,
+                  derivationPath: "m/44'/60'/0'/0/"
+              })
+          },
+          gas: 6000000,
+          gasPrice: 20000000000, // 20 gwei
+          network_id: 11155111,
+          networkCheckTimeout: 120000,
+          timeoutBlocks: 300,
+          deploymentPollingInterval: 10000,
+          skipDryRun: true
+      }
+
   },
   contracts_directory: './contracts/',
   contracts_build_directory: './abis/',
   compilers: {
     solc: {
-      version: "^0.8.6",
+      version: "^0.8.19",
       settings: {
-        evmVersion: 'byzantium',
+        evmVersion: 'london', // Updated from 'byzantium'
         optimizer: {
           enabled: true,
-          runs: 1
+          runs: 200
         }
-      },
-      mocha: {
-        reporter: 'eth-gas-reporter',
       }
     }
+  },
+  mocha: {
+    reporter: 'eth-gas-reporter',
   },
   plugins: ["truffle-contract-size"]
 }

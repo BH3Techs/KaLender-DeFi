@@ -1,8 +1,7 @@
 import React from "react";
+import WalletManager from '../wallet/WalletManager';
 
-
-export default function Navbar({accountAddress}) {
-
+export default function Navbar() {
   return (
     <>
       {/* Navbar */}
@@ -11,22 +10,16 @@ export default function Navbar({accountAddress}) {
           {/* Brand */}
           <div className="w-full flex items-center justify-between">
             <div className="flex justify-between">
-              {" "}
               <a
                 className="text-white text-sm hidden lg:inline-block font-semibold"
-                href="#pablo"
+                href="#"
                 onClick={(e) => e.preventDefault()}
               >
-                Dashboard
+                KaLender DeFi
               </a>
             </div>
-            <div className="px-4 py-1 text-white border bg-gray-800 border-gray-400 rounded-md">
-              {accountAddress.slice(0,7)}...{accountAddress.slice(accountAddress.length-10)}
-            </div>
+            <WalletManager />
           </div>
-          {/* Form */}
-
-          {/* User */}
         </div>
       </nav>
       {/* End Navbar */}

@@ -31,8 +31,8 @@ export default function ReserveStatus({ token }) {
                 <p className="font-medium text-lg">${todp(token.totalSuppliedInContract.inDollars, 3)}</p>
               </div>
               <div className="ml-4">
-                <p className="font-medium text-gray-500 text-sm">APY </p>
-                <p className="font-medium sm:text-lg">N/A</p>
+                <p className="font-medium text-gray-500 text-sm">Supply APY </p>
+                <p className="font-medium sm:text-lg text-green-600">{token.supplyAPY || "0"}%</p>
               </div>
             </div>
             <div className="bg-gray-200 my-3 px-2 rounded-md">

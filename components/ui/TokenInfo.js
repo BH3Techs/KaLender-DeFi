@@ -2,8 +2,27 @@ import { todp } from "../../utils/todp";
 import { useState } from "react";
 import ModalBorrow from "./ModalBorrow";
 import ModalSupply from "./ModalSupply";
-import ERC20 from "../../abis/ADE.json";
-import LARToken from "../../abis/LARToken.json";
+// Standard ERC20 ABI for approve/transfer functions
+const ERC20_ABI = [
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "_spender", "type": "address"},
+      {"name": "_value", "type": "uint256"}
+    ],
+    "name": "approve",
+    "outputs": [{"name": "", "type": "bool"}],
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "_owner", "type": "address"}],
+    "name": "balanceOf",
+    "outputs": [{"name": "balance", "type": "uint256"}],
+    "type": "function"
+  }
+];
+// LAR token removed - using tokenless architecture
 import { trackPromise } from "react-promise-tracker";
 
 export default function TokenInfo({
@@ -45,34 +64,21 @@ export default function TokenInfo({
   };
 
   const supplyToken = async (token, value) => {
-    let NETWORK_ID = await web3.eth.net.getId();
-    const tokenInst = new web3.eth.Contract(ERC20.abi, token.tokenAddress);
-    const larToken = new web3.eth.Contract(
-      ERC20.abi,
-      LARToken.networks[NETWORK_ID].address
-    );
+    const tokenInst = new web3.eth.Contract(ERC20_ABI, token.tokenAddress);
 
     try {
+      // Approve the lending contract to spend the supply amount
       await trackPromise(
         tokenInst.methods
           .approve(contract.options.address, web3.utils.toWei(value.toString()))
-          .send({ from: account.data })
+          .send({ from: account })
       );
 
+      // Use new contract's supply function
       const supplyResult = await trackPromise(
         contract.methods
-          .lend(tokenInst.options.address, web3.utils.toWei(value.toString()))
-          .send({ from: account.data })
-      );
-
-      const larTokenBalance = await larToken.methods
-        .balanceOf(account.data)
-        .call();
-
-      await trackPromise(
-        larToken.methods
-          .approve(contract.options.address, web3.utils.toWei(larTokenBalance.toString()))
-          .send({ from: account.data })
+          .supply(token.tokenAddress, web3.utils.toWei(value.toString()))
+          .send({ from: account })
       );
 
       setSupplyResult(supplyResult);
@@ -86,9 +92,10 @@ export default function TokenInfo({
     setBorrowingResult(null);
 
     try {
+      // Updated to match new contract signature: borrow(asset, amount)
       const borrowingResult = await trackPromise(
         contract.methods
-          .borrow(web3.utils.toWei(value.toString()), token.tokenAddress)
+          .borrow(token.tokenAddress, web3.utils.toWei(value.toString()))
           .send({ from: account.data })
       );
       setBorrowingResult(borrowingResult);
@@ -128,42 +135,7 @@ export default function TokenInfo({
     }
   };
 
-  const addLAR = async (token) => {
-    let NETWORK_ID = await web3.eth.net.getId();
-    const larToken = new web3.eth.Contract(
-      ERC20.abi,
-      LARToken.networks[NETWORK_ID].address
-    );
-
-    const tokenAddress = larToken.options.address;
-    const tokenSymbol = "LAR";
-    const tokenDecimals = 18;
-    const tokenImage = IMAGES["LAR"];
-
-    try {
-      // wasAdded is a boolean. Like any RPC method, an error may be thrown.
-      const wasAdded = await ethereum.request({
-        method: "wallet_watchAsset",
-        params: {
-          type: "ERC20", // Initially only supports ERC20, but eventually more!
-          options: {
-            address: tokenAddress, // The address that the token is at.
-            symbol: tokenSymbol, // A ticker symbol or shorthand, up to 5 chars.
-            decimals: tokenDecimals, // The number of decimals in the token
-            image: tokenImage, // A string url of the token logo
-          },
-        },
-      });
-
-      if (wasAdded) {
-       // Added
-      } else {
-       // Not Added
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
+  // LAR token function removed - using tokenless architecture
 
   return (
     <div className="relative flex flex-col min-w-0 break-words px-4 bg-white w-full mb-6 shadow-lg rounded">
@@ -230,7 +202,6 @@ export default function TokenInfo({
                   token={selectedTokenToSupply}
                   supplyError={supplyError}
                   supplyResult={supplyResult}
-                  addLAR={addLAR}
                   closeModal={handleCloseModal}
                   onSupply={supplyToken}
                 />

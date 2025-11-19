@@ -2,6 +2,8 @@ import Navbar from "../../components/ui/Navbar";
 import ReserveStatus from "../../components/ui/ReserveStatus";
 import TokenInfo from "../../components/ui/TokenInfo";
 import Footer from "../../components/ui/Footer";
+import CurrentPrice from "../../components/ui/CurrentPrice";
+import PriceChart from "../../components/ui/PriceChart";
 import Image from "next/image";
 import {
   useAccount,
@@ -80,6 +82,16 @@ export default function Details({ token }) {
                       <div className="text-2xl sm:text-4xl text- ml-2 text-white font-bold">
                         {token.name}
                       </div>
+                      {/* Current Price Display */}
+                      <div className="ml-6 hidden sm:block">
+                        <CurrentPrice
+                          symbol={token.symbol}
+                          onPriceUpdate={(price) => {
+                            // Update token price when received from API
+                            token.oneTokenToDollar = price.toString();
+                          }}
+                        />
+                      </div>
                     </div>
                     <div className="flex">
                       <div className="flex pt-2 sm:ml-6 items-center">
@@ -152,6 +164,13 @@ export default function Details({ token }) {
           </div>
         </div>
         <div className="px-2 md:px-10 mx-auto w-full -m-24">
+          {/* Price Chart Section */}
+          <div className="flex flex-wrap mt-4 mb-6">
+            <div className="w-full px-2">
+              <PriceChart symbol={token.symbol} currentPrice={token.oneTokenToDollar || "1"} />
+            </div>
+          </div>
+
           <div className="flex flex-wrap mt-4">
             <div className="w-full xl:w-8/12 mb-5 xl:mb-0 px-2">
               <ReserveStatus token={token} />
@@ -185,14 +204,24 @@ export async function getServerSideProps(context) {
 
   const query = context.query;
 
-  const image = JSON.parse(query.image);
+  // Helper function to safely parse JSON or return default value
+  const safeJSONParse = (str, defaultValue = null) => {
+    if (!str || str === 'undefined') return defaultValue;
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      return defaultValue;
+    }
+  };
 
-  const availableAmountInContract = JSON.parse(query.availableAmountInContract);
-  const totalBorrowedInContract = JSON.parse(query.totalBorrowedInContract);
-  const totalSuppliedInContract = JSON.parse(query.totalSuppliedInContract);
-  const userTokenBorrowedAmount = JSON.parse(query.userTokenBorrowedAmount);
-  const userTokenLentAmount = JSON.parse(query.userTokenLentAmount);
-  const walletBalance = JSON.parse(query.walletBalance);
+  const image = safeJSONParse(query.image, "");
+
+  const availableAmountInContract = safeJSONParse(query.availableAmountInContract, { amount: "0", inDollars: "0" });
+  const totalBorrowedInContract = safeJSONParse(query.totalBorrowedInContract, { amount: "0", inDollars: "0" });
+  const totalSuppliedInContract = safeJSONParse(query.totalSuppliedInContract, { amount: "0", inDollars: "0" });
+  const userTokenBorrowedAmount = safeJSONParse(query.userTokenBorrowedAmount, { amount: "0", inDollars: "0" });
+  const userTokenLentAmount = safeJSONParse(query.userTokenLentAmount, { amount: "0", inDollars: "0" });
+  const walletBalance = safeJSONParse(query.walletBalance, { amount: "0", inDollars: "0" });
 
   const token = {
     ...query,
@@ -203,6 +232,8 @@ export async function getServerSideProps(context) {
     userTokenBorrowedAmount,
     userTokenLentAmount,
     walletBalance,
+    oneTokenToDollar: query.oneTokenToDollar || "1",
+    userTotalAmountAvailableForBorrowInDollars: query.userTotalAmountAvailableForBorrowInDollars || "0"
   };
 
 

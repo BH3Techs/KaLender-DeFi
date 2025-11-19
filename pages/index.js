@@ -10,13 +10,15 @@ import {
   useYourSupplies,
 } from "../components/hooks/web3";
 import { useWeb3 } from "../components/providers/web3";
+import { useAccount as useWagmiAccount } from 'wagmi';
 import { useEffect, useState } from "react";
 import eth from "../assets/eth.png";
 import ERC20 from "../abis/ADE.json";
-import LARToken from "../abis/LARToken.json";
+// LAR token removed - using tokenless architecture
 import { trackPromise } from "react-promise-tracker";
 import { todp } from "../utils/todp";
 import Navbar from "../components/ui/Navbar";
+import WalletManager from "../components/wallet/WalletManager";
 import YourSupply from "../components/ui/YourSupplies";
 import YourBorrows from "../components/ui/YourBorrows";
 import SupplyAsset from "../components/ui/SupplyAssets";
@@ -33,7 +35,8 @@ import BorrowRow from "../components/ui/BorrowRow";
 import Card from "../components/ui/Card";
 export default function Home() {
   const { network } = useNetwork();
-  const { requireInstall, isLoading, connect, contract, web3 } = useWeb3();
+  const { isLoading, contract, web3 } = useWeb3();
+  const { isConnected, address } = useWagmiAccount();
   const { account } = useAccount();
   const { tokens } = useSupplyAssets();
   const { tokensForBorrow } = useBorrowAssets();
@@ -41,14 +44,13 @@ export default function Home() {
   const { yourBorrows } = useYourBorrows();
 
   const IMAGES = {
-    DAI:
-      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSllrF9PNBf88kIx9USP5g73XDYjkMyRBaDig&usqp=CAU",
+    DAI: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSllrF9PNBf88kIx9USP5g73XDYjkMyRBaDig&usqp=CAU",
     WETH: "https://staging.aave.com/icons/tokens/weth.svg",
+    USDC: "https://staging.aave.com/icons/tokens/usdc.svg",
+    USDT: "https://staging.aave.com/icons/tokens/usdt.svg",
     LINK: "https://staging.aave.com/icons/tokens/link.svg",
-    FAU:
-      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5qUPi3Ar2dQZ2m9K5opr_h9QaQz4_G5HVYA&usqp=CAU",
-    LAR:
-      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSqZs8PLHRLaGd4QfIvOYmCg30svx5dHp0y6A&usqp=CAU",
+    FAU: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5qUPi3Ar2dQZ2m9K5opr_h9QaQz4_G5HVYA&usqp=CAU",
+    // LAR removed from tokenless architecture
   };
 
   const [selectedTokenToSupply, setSelectedTokenToSupply] = useState(null);
@@ -93,34 +95,21 @@ export default function Home() {
 
 
   const supplyToken = async (token, value) => {
-    let NETWORK_ID = await web3.eth.net.getId();
     const tokenInst = new web3.eth.Contract(ERC20.abi, token.tokenAddress);
-    const larToken = new web3.eth.Contract(
-      ERC20.abi,
-      LARToken.networks[NETWORK_ID].address
-    );
 
     try {
+      // Approve token spending
       await trackPromise(
         tokenInst.methods
           .approve(contract.options.address, toWei(value))
-          .send({ from: account.data })
+          .send({ from: address })
       );
 
+      // Supply tokens to the new pool-based contract
       const supplyResult = await trackPromise(
         contract.methods
-          .lend(tokenInst.options.address, toWei(value))
-          .send({ from: account.data })
-      );
-
-      const larTokenBalance = await larToken.methods
-        .balanceOf(account.data)
-        .call();
-
-      await trackPromise(
-        larToken.methods
-          .approve(contract.options.address, toWei(larTokenBalance))
-          .send({ from: account.data })
+          .supply(token.tokenAddress, toWei(value))
+          .send({ from: address })
       );
 
       setSupplyResult(supplyResult);
@@ -134,10 +123,11 @@ export default function Home() {
     setBorrowingResult(null);
 
     try {
+      // Updated to match new contract signature: borrow(asset, amount)
       const borrowingResult = await trackPromise(
         contract.methods
-          .borrow(toWei(value), token.tokenAddress)
-          .send({ from: account.data })
+          .borrow(token.tokenAddress, toWei(value))
+          .send({ from: address })
       );
       setBorrowingResult(borrowingResult);
     } catch (err) {
@@ -154,7 +144,7 @@ export default function Home() {
       const withdrawResult = await trackPromise(
         contract.methods
           .withdraw(token.tokenAddress, toWei(value))
-          .send({ from: account.data })
+          .send({ from: address })
       );
       setWithdrawResult(withdrawResult);
     } catch (err) {
@@ -167,20 +157,20 @@ export default function Home() {
     setRepayResult(null);
 
     const tokenToRepay = new web3.eth.Contract(ERC20.abi, token.tokenAddress);
-    const interest = Number(token.borrowAPYRate) * Number(toWei(value));
-    const amountToPayBack = (Number(toWei(value)) + interest).toString();
 
     try {
+      // Approve the lending contract to spend the repay amount
       await trackPromise(
         tokenToRepay.methods
-          .approve(contract.options.address, toWei(amountToPayBack))
-          .send({ from: account.data })
+          .approve(contract.options.address, toWei(value))
+          .send({ from: address })
       );
 
+      // Use new contract's repay function instead of payDebt
       const repayResult = await trackPromise(
         contract.methods
-          .payDebt(token.tokenAddress, toWei(value))
-          .send({ from: account.data })
+          .repay(token.tokenAddress, toWei(value))
+          .send({ from: address })
       );
       setRepayResult(repayResult);
     } catch (err) {
@@ -251,42 +241,7 @@ export default function Home() {
     }
   };
 
-  const addLAR = async (token) => {
-    let NETWORK_ID = await web3.eth.net.getId();
-    const larToken = new web3.eth.Contract(
-      ERC20.abi,
-      LARToken.networks[NETWORK_ID].address
-    );
-
-    const tokenAddress = larToken.options.address;
-    const tokenSymbol = "LAR";
-    const tokenDecimals = 18;
-    const tokenImage = IMAGES["LAR"];
-
-    try {
-      // wasAdded is a boolean. Like any RPC method, an error may be thrown.
-      const wasAdded = await ethereum.request({
-        method: "wallet_watchAsset",
-        params: {
-          type: "ERC20", // Initially only supports ERC20, but eventually more!
-          options: {
-            address: tokenAddress, // The address that the token is at.
-            symbol: tokenSymbol, // A ticker symbol or shorthand, up to 5 chars.
-            decimals: tokenDecimals, // The number of decimals in the token
-            image: tokenImage, // A string url of the token logo
-          },
-        },
-      });
-
-      if (wasAdded) {
-        // Added
-      } else {
-        // Not Added
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
+  // LAR token function removed - using tokenless architecture
 
 
 
@@ -296,14 +251,14 @@ export default function Home() {
         <title>KaLender Crypto</title>
       </Head>
       {!isLoading ? (
-        account.data ? (
+        isConnected ? (
           <>
             {false ? (
               <div>Page is Loading</div>
             ) : (
               <div>
                 <div className="relative bg-gray-100 ">
-                  <Navbar accountAddress={account.data} />
+                  <Navbar />
                   {/* Header */}
                   <div className="relative bg-gray-700 md:pt-32 pb-32 pt-12">
                     <div className="px-1 md:px-10 mx-auto w-full">
@@ -323,8 +278,8 @@ export default function Home() {
                                 />
 
                                 <div className="">
-                                    {network.data === "Sepolia Test Network"
-                                    ?<div className="text-2xl sm:text-2xl text- ml-2 text-white font-bold">{network.data}</div>
+                                    {network.isSupported
+                                    ?<div className="text-2xl sm:text-2xl text- ml-2 text-white font-bold">{network.data?.name || "Sepolia Test Network"}</div>
                                     :(<><div className="bg-red-500 p-2 text-sm rounded-md text-white">Connected to the Wrong network</div>
                                     <div className="text-2xl sm:text-2xl text- ml-2 text-white font-bold">Switch to Sepolia</div></>)
                                     }
@@ -603,29 +558,19 @@ export default function Home() {
               {/* <ModalWithdraw /> */}
             </div>
           </>
-        ) : requireInstall ? (
-          <div className="w-full grid h-screen place-items-center bg-black text-white">
-            <button onClick={() => {window.open('https://metamask.io/download/', '_blank')}} className="border border-white p-2 rounded-md">
-              Install metamask
-            </button>
-          </div>
         ) : (
           <div className="w-full grid h-screen place-items-center bg-black text-white">
-            <div>
-            <h1 className="title">
-              Welcome to <a href="https://thirdweb.com/">KaLender-Crypto</a>!
-            </h1>
+            <div className="text-center">
+              <h1 className="text-4xl font-bold mb-4">
+                Welcome to <span className="text-blue-400">KaLender-Crypto</span>!
+              </h1>
 
-            <p className="description">
-              The most reliable borrowing platform. Crypto is the collateral.
-            </p>
+              <p className="text-lg mb-8 text-gray-300">
+                The most reliable borrowing platform. Crypto is the collateral.
+              </p>
+
+              <WalletManager />
             </div>
-            <button
-              onClick={() => connect()}
-              className="border border-white p-2 rounded-md the_color"
-            >
-              Connect to metamask with your browser
-            </button>
           </div>
         )
       ) : (
@@ -643,7 +588,6 @@ export default function Home() {
             supplyError={supplyError}
             supplyResult={supplyResult}
             transactionHash={transactionHash}
-            addLAR={addLAR}
             newSupply={newSupply}
             closeModal={handleCloseModal}
             onSupply={supplyToken}

@@ -1,5 +1,6 @@
 import useSWR from "swr";
-import { normalizeToken } from "../../../../utils/normalize"
+import { normalizeToken } from "../../../../utils/normalize";
+import { useAccount } from 'wagmi';
 
 const NETWORKS = {
   1: "Ethereum Main Network",
@@ -13,45 +14,71 @@ const NETWORKS = {
 };
 
 export const handler = (web3, contract) => () => {
-  const { data, error, mutate, ...rest } = useSWR(
-    () => (web3 ? "web3/your_supplies" : null),
-    async () => {
-      const accounts = await web3.eth.getAccounts();
-      const account = accounts[0];
+  // Your custom test tokens on Sepolia
+  const SUPPORTED_TOKENS = [
+    {
+      address: "DEPLOY_XPLUG_ADDRESS_HERE", // XPLUG Token (replace after deployment)
+      name: "XPLUG Token",
+      symbol: "XPLUG",
+      image: "https://via.placeholder.com/32x32/10b981/ffffff?text=X"
+    },
+    {
+      address: "DEPLOY_NMB_ADDRESS_HERE", // NMB Token (replace after deployment)
+      name: "NMB Token",
+      symbol: "NMB",
+      image: "https://via.placeholder.com/32x32/3b82f6/ffffff?text=N"
+    }
+  ];
 
+  const { address } = useAccount();
+
+  const { data, error, mutate, ...rest } = useSWR(
+    () => (web3 && contract && address ? "web3/your_supplies" : null),
+    async () => {
       const yourSupplies = [];
       let yourBalance = 0;
-      const tokenAddressTracker = [];
 
-      const noOfTokensLent = await contract.methods.noOfTokensLent().call();
+      for (let i = 0; i < SUPPORTED_TOKENS.length; i++) {
+        const token = SUPPORTED_TOKENS[i];
 
-      if (Number(noOfTokensLent) > 0) {
-        for (let i = 0; i < Number(noOfTokensLent); i++) {
-          const currentTokenAddress = await contract.methods.tokensLent(i, account).call();
+        try {
+          // Get pool information
+          const poolInfo = await contract.methods.pools(token.address).call();
 
-          if (tokenAddressTracker.includes(currentTokenAddress)) {
-            continue;
-          }
+          if (poolInfo.poolToken && poolInfo.poolToken !== "0x0000000000000000000000000000000000000000") {
+            // Get user's pool token balance
+            const poolTokenContract = new web3.eth.Contract(
+              [{
+                "constant": true,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function"
+              }],
+              poolInfo.poolToken
+            );
 
-          if (currentTokenAddress.toString() !== "0x0000000000000000000000000000000000000000") {
-            const currentToken = await contract.methods.getTokenFrom(currentTokenAddress).call();
-            console.log("Hi",currentTokenAddress);
+            const userPoolTokens = await poolTokenContract.methods.balanceOf(address).call();
 
-            const normalized = await normalizeToken(web3,contract,currentToken);
+            if (userPoolTokens && userPoolTokens !== "0") {
+              // User has supplies in this pool
+              const supplyData = {
+                tokenAddress: token.address,
+                name: token.symbol,
+                symbol: token.symbol,
+                userSuppliedAmount: userPoolTokens, // Pool tokens represent supplied amount
+                decimals: 18,
+                image: token.image
+              };
 
-            yourBalance += parseFloat(normalized.userTokenLentAmount.inDollars);
-
-            if (Number(normalized.userTokenLentAmount.inDollars) > 0.0000000000001) {
-
-              yourSupplies.push(normalized);
-              tokenAddressTracker.push(currentTokenAddress);
+              yourSupplies.push(supplyData);
             }
-            console.log("Suplies",yourSupplies);
           }
+        } catch (err) {
+          console.log(`Error getting supplies for ${token.symbol}:`, err);
         }
-
-
       }
+
       return { yourSupplies, yourBalance };
     }
   );

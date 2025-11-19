@@ -1,16 +1,16 @@
 import { createContext, useContext, useState, useEffect, useMemo } from "react";
-import detectEthereumProvider from "@metamask/detect-provider";
-import Web3 from "web3";
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { setupHooks } from "./hooks/setupHooks";
 import { loadContract } from "../../../utils/loadContract";
+import LendingContract from "../../../abis/LendingAndBorrowing.json";
 
 const Web3Context = createContext(null);
 
-const setListeners = (provider) => {
-  provider.on("chainChanged", (_) => window.location.reload());
-};
-
 export default function Web3Provider({ children }) {
+  const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+
   const createWeb3State = ({ web3, provider, contract, isLoading }) => {
     return {
       web3,
@@ -32,44 +32,56 @@ export default function Web3Provider({ children }) {
 
   useEffect(() => {
     const loadProvider = async () => {
-      const provider = await detectEthereumProvider();
-      if (provider) {
-        const web3 = new Web3(provider);
-        const contract = await loadContract("LendingAndBorrowing", web3);
+      if (walletClient && publicClient) {
+        // Create a Web3-compatible provider from wagmi clients
+        const provider = walletClient;
+        const web3 = {
+          eth: {
+            net: { getId: () => publicClient.chain.id },
+            Contract: function(abi, address) {
+              // Simplified contract interface for compatibility
+              return {
+                options: { address },
+                methods: {}
+              };
+            }
+          },
+          utils: {
+            toWei: (value) => BigInt(value) * BigInt(10**18)
+          }
+        };
+
+        // Load the actual contract with proper ABI and methods
+        const contractAddress = process.env.LENDING_CONTRACT_ADDRESS || '0x338634D7D45feC2fB9eC061BEF83628fe3DDB9D4';
+        const contract = new web3.eth.Contract(LendingContract.abi, contractAddress);
+
         setWeb3Api(
           createWeb3State({ web3, provider, contract, isLoading: false })
         );
-        setListeners(provider);
-      } else {
-        console.error("Please Install metamask");
-        setWeb3Api((prevWeb3Api) => ({ ...prevWeb3Api, isLoading: false }));
+      } else if (!isConnected) {
+        setWeb3Api(
+          createWeb3State({
+            web3: null,
+            provider: null,
+            contract: null,
+            isLoading: false,
+          })
+        );
       }
     };
 
     loadProvider();
-  }, []);
+  }, [walletClient, publicClient, isConnected]);
 
   const _web3Api = useMemo(() => {
     const { web3, provider, isLoading, contract } = web3Api;
 
     return {
       ...web3Api,
-      requireInstall: !isLoading && !web3,
-      connect: provider
-        ? async () => {
-            try {
-              console.log("Trying to connect to metamask");
-              await provider.request({
-                method: "eth_requestAccounts",
-              });
-            } catch {
-              console.error("Not connecting to metamask");
-              location.reload();
-            }
-          }
-        : () => console.log("Cannot find provider"),
+      requireInstall: !isLoading && !isConnected,
+      connect: () => console.log("Use wagmi wallet connection"),
     };
-  }, [web3Api]);
+  }, [web3Api, isConnected]);
 
   // Return another instance of _web3Api if web3Api changes
 

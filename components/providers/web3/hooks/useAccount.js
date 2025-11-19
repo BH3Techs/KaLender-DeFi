@@ -21,12 +21,14 @@ export const handler = (web3 = null, provider = null) => {
 
 
     useEffect(() => {
-      const mutator = (accounts) => window.location.reload();
-
-      provider?.on("accountsChanged", mutator);
-
-      return () => provider?.removeListener("accountsChanged", mutator);
-    }, []);
+      // Check if provider has event listener capabilities (old web3 provider)
+      if (provider && typeof provider.on === 'function') {
+        const mutator = (accounts) => window.location.reload();
+        provider.on("accountsChanged", mutator);
+        return () => provider.removeListener("accountsChanged", mutator);
+      }
+      // For wagmi providers, account changes are handled automatically
+    }, [provider]);
 
     return {
       mutate,

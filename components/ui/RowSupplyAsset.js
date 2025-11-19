@@ -25,7 +25,7 @@ export default function RowSupplyAsset({ token, Supply, Details }) {
           <div className="text-sm text-gray-500">${todp(token.walletBalance.inDollars, 2)}</div>
         </td>
         <td className="border-t-0 px-4 border  align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
-          <div className="text-base">N/A</div>
+          <div className="text-base text-green-600">{token.supplyAPY || "0"}%</div>
         </td>
         <td className="border-t-0 px-4 border  align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
           <div className="text-green-700 text-lg font-large"> &#10004; </div>
